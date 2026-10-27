@@ -1,0 +1,56 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: vertex
+      POSTGRES_PASSWORD: vertex
+      POSTGRES_DB: vertex
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vertex -d vertex"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  api:
+    build: ./apps/api
+    environment:
+      DATABASE_URL: postgresql+psycopg://vertex:vertex@postgres:5432/vertex
+      REDIS_URL: redis://redis:6379/0
+      VERTEX_SCHEDULER: "1"
+      VERTEX_AUTO_SEED: "1"
+      VERTEX_LLM_API_KEY: ${VERTEX_LLM_API_KEY:-}
+      VERTEX_LLM_BASE_URL: ${VERTEX_LLM_BASE_URL:-https://api.openai.com/v1}
+      VERTEX_LLM_MODEL: ${VERTEX_LLM_MODEL:-gpt-4o-mini}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  web:
+    build: ./apps/web
+    environment:
+      API_URL: http://api:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
